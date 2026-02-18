@@ -1,0 +1,13 @@
+node_modules/
+screenshots/
+data/
+backups/
+.env
+*.log
+.git
+.gitignore
+.dockerignore
+deploy.sh
+README.md
+docker-compose*.yml
+nginx/ssl/*

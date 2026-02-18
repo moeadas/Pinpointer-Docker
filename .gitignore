@@ -1,0 +1,8 @@
+node_modules/
+screenshots/
+data/
+backups/
+.env
+*.log
+nginx/ssl/*.pem
+nginx/ssl/*.key
