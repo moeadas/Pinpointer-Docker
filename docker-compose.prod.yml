@@ -2,7 +2,7 @@
 # Pinpointer v6.0 — Production (Hostinger VPS)
 # Traefik -> Nginx -> Node.js App
 #
-# Domain: audit.moeadas.com
+# Domain: audit.audit.pinpoint.online
 # Network: root_default (shared with Traefik)
 #
 # Usage: docker compose -f docker-compose.prod.yml up -d --build
@@ -72,18 +72,18 @@ services:
       retries: 3
       start_period: 10s
     # ─── Traefik Labels ───
-    # Traefik discovers this container and routes audit.moeadas.com -> here
+    # Traefik discovers this container and routes audit.audit.pinpoint.online -> here
     labels:
       - "traefik.enable=true"
       # HTTPS router
-      - "traefik.http.routers.pinpointer.rule=Host(`audit.moeadas.com`)"
+      - "traefik.http.routers.pinpointer.rule=Host(`audit.pinpoint.online`)"
       - "traefik.http.routers.pinpointer.entrypoints=websecure"
       - "traefik.http.routers.pinpointer.tls=true"
       - "traefik.http.routers.pinpointer.tls.certresolver=letsencrypt"
       # Service points to Nginx port 80
       - "traefik.http.services.pinpointer.loadbalancer.server.port=80"
       # HTTP -> HTTPS redirect
-      - "traefik.http.routers.pinpointer-http.rule=Host(`audit.moeadas.com`)"
+      - "traefik.http.routers.pinpointer-http.rule=Host(`audit.pinpoint.online`)"
       - "traefik.http.routers.pinpointer-http.entrypoints=web"
       - "traefik.http.routers.pinpointer-http.middlewares=pinpointer-redirect"
       - "traefik.http.middlewares.pinpointer-redirect.redirectscheme.scheme=https"

@@ -37,11 +37,11 @@ docker compose up -d --build
 ### Prerequisites
 - Docker + Docker Compose on VPS
 - Traefik running on `root_default` network (ports 80/443)
-- DNS: `audit.moeadas.com` → VPS IP (Cloudflare)
+- DNS: `audit.pinpoint.online` → VPS IP `72.62.33.12`
 
 ### Deploy
 ```bash
-ssh user@your-vps-ip
+ssh root@72.62.33.12
 git clone https://github.com/moeadas/Pinpointer-Docker.git
 cd Pinpointer-Docker
 chmod +x deploy.sh
@@ -60,7 +60,7 @@ The deploy script will:
 | File | Purpose |
 |---|---|
 | `docker-compose.yml` | Local development (port 8090) |
-| `docker-compose.prod.yml` | Production with Traefik (audit.moeadas.com) |
+| `docker-compose.prod.yml` | Production with Traefik (audit.pinpoint.online) |
 
 ## API Endpoints
 
