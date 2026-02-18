@@ -1,6 +1,6 @@
 # ═══════════════════════════════════════════════
 # Pinpointer v6.0 — Production (Hostinger VPS)
-# Traefik -> Nginx -> Node.js App
+# Traefik -> Node.js App (direct)
 #
 # Domain: audit.pinpoint.online
 # VPS: 72.62.33.12 (srv1126518.hstgr.cloud)
@@ -10,7 +10,6 @@
 # ═══════════════════════════════════════════════
 
 services:
-  # ─── Node.js Application ───
   pinpointer-app:
     build: .
     container_name: pinpointer-app
@@ -42,53 +41,22 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+    # ─── Traefik Labels ───
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pinpointer.rule=Host(`audit.pinpoint.online`)"
+      - "traefik.http.routers.pinpointer.tls=true"
+      - "traefik.http.routers.pinpointer.entrypoints=websecure"
+      - "traefik.http.routers.pinpointer.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.pinpointer.loadbalancer.server.port=3000"
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
     networks:
-      - pinpointer-internal
-
-  # ─── Nginx Reverse Proxy ───
-  # Traefik -> Nginx (this) -> Node.js app
-  pinpointer-nginx:
-    image: nginx:alpine
-    container_name: pinpointer-nginx
-    restart: unless-stopped
-    expose:
-      - "80"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      pinpointer-app:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    # ─── Traefik Labels ───
-    # Matches your existing Traefik config from /root/docker-compose.yml
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.pinpointer.rule=Host(`audit.pinpoint.online`)"
-      - "traefik.http.routers.pinpointer.tls=true"
-      - "traefik.http.routers.pinpointer.entrypoints=web,websecure"
-      - "traefik.http.routers.pinpointer.tls.certresolver=mytlschallenge"
-      - "traefik.http.services.pinpointer.loadbalancer.server.port=80"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "2"
-    networks:
-      - pinpointer-internal
       - root_default
 
 networks:
-  pinpointer-internal:
-    driver: bridge
   root_default:
     external: true

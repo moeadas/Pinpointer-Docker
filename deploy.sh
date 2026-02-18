@@ -1,7 +1,7 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════
 # Pinpointer v6.0 — Production Deploy Script
-# Hostinger VPS: Traefik -> Nginx -> Node.js
+# Hostinger VPS: Traefik -> Node.js + Puppeteer
 #
 # Usage: bash deploy.sh
 # ═══════════════════════════════════════════════
@@ -10,9 +10,7 @@ set -euo pipefail
 
 COMPOSE_FILE="docker-compose.prod.yml"
 APP_CONTAINER="pinpointer-app"
-NGINX_CONTAINER="pinpointer-nginx"
 BACKUP_DIR="./backups"
-HEALTH_URL="http://localhost:3000/health"
 MAX_HEALTH_RETRIES=12
 HEALTH_INTERVAL=5
 
@@ -32,7 +30,7 @@ echo ""
 echo "═══════════════════════════════════════════════"
 echo "  🎯 Pinpointer v6.0 — Production Deployment"
 echo "  📍 Domain: audit.pinpoint.online"
-echo "  🏗️  Stack: Traefik → Nginx → Node.js + Puppeteer"
+echo "  🏗️  Stack: Traefik → Node.js + Puppeteer"
 echo "═══════════════════════════════════════════════"
 echo ""
 
@@ -81,21 +79,20 @@ if docker ps --format '{{.Names}}' | grep -q "$APP_CONTAINER"; then
     mkdir -p "$BACKUP_DIR"
     TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 
-    # Save current image ID
     CURRENT_IMAGE=$(docker inspect --format='{{.Image}}' "$APP_CONTAINER" 2>/dev/null || echo "none")
     echo "$CURRENT_IMAGE" > "$BACKUP_DIR/image_$TIMESTAMP.txt"
-
-    # Save container logs
     docker logs "$APP_CONTAINER" --tail 200 > "$BACKUP_DIR/logs_$TIMESTAMP.txt" 2>&1 || true
 
     ok "Backup saved to $BACKUP_DIR/*_$TIMESTAMP.*"
 fi
 
 # ─── Stop Existing Containers ───
-if docker ps -a --format '{{.Names}}' | grep -qE "(${APP_CONTAINER}|${NGINX_CONTAINER})"; then
-    log "Stopping existing Pinpointer containers..."
+if docker ps -a --format '{{.Names}}' | grep -q "$APP_CONTAINER"; then
+    log "Stopping existing Pinpointer container..."
     docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>/dev/null || true
-    ok "Old containers stopped"
+    # Also clean up any test containers
+    docker rm -f pinpointer-test 2>/dev/null || true
+    ok "Old container stopped"
 fi
 
 # ─── Build and Start ───
@@ -106,9 +103,9 @@ echo ""
 docker compose -f "$COMPOSE_FILE" build --no-cache
 ok "Image built successfully"
 
-log "Starting containers..."
+log "Starting container..."
 docker compose -f "$COMPOSE_FILE" up -d
-ok "Containers started"
+ok "Container started"
 
 # ─── Health Check with Retry ───
 log "Waiting for health check..."
@@ -117,7 +114,6 @@ HEALTHY=false
 for i in $(seq 1 $MAX_HEALTH_RETRIES); do
     sleep $HEALTH_INTERVAL
 
-    # Check if container is running
     if ! docker ps --format '{{.Names}}' | grep -q "$APP_CONTAINER"; then
         err "Container '$APP_CONTAINER' is not running!"
         echo ""
@@ -126,7 +122,6 @@ for i in $(seq 1 $MAX_HEALTH_RETRIES); do
         break
     fi
 
-    # Check health endpoint
     HEALTH=$(docker exec "$APP_CONTAINER" wget -qO- http://localhost:3000/health 2>/dev/null || echo "")
     if echo "$HEALTH" | grep -q '"status":"ok"'; then
         HEALTHY=true
@@ -142,28 +137,24 @@ else
     err "Health check failed after $MAX_HEALTH_RETRIES attempts"
     echo ""
 
-    # ─── Auto-Rollback ───
-    warn "Rolling back to previous version..."
+    warn "Rolling back..."
     docker compose -f "$COMPOSE_FILE" down 2>/dev/null || true
 
     if [ -n "${CURRENT_IMAGE:-}" ] && [ "$CURRENT_IMAGE" != "none" ]; then
         warn "Previous image: $CURRENT_IMAGE"
-        warn "Manual rollback: docker run -d --name $APP_CONTAINER $CURRENT_IMAGE"
     fi
 
     echo ""
-    echo "Debug commands:"
-    echo "  docker logs $APP_CONTAINER"
-    echo "  docker compose -f $COMPOSE_FILE logs"
+    echo "Debug: docker logs $APP_CONTAINER"
     exit 1
 fi
 
 # ─── Verify Traefik Integration ───
 log "Verifying Traefik integration..."
-if docker network inspect root_default --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null | grep -q "$NGINX_CONTAINER"; then
-    ok "Nginx container connected to Traefik network (root_default)"
+if docker network inspect root_default --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null | grep -q "$APP_CONTAINER"; then
+    ok "App container connected to Traefik network (root_default)"
 else
-    warn "Nginx container may not be on root_default network. Check Traefik routing."
+    warn "App container may not be on root_default network. Check Traefik routing."
 fi
 
 # ─── Final Status ───
@@ -175,16 +166,14 @@ echo "  🌐 Public URL:  https://audit.pinpoint.online"
 echo "  🏥 Health:      docker exec $APP_CONTAINER wget -qO- http://localhost:3000/health"
 echo ""
 echo "  📋 Commands:"
-echo "     Logs (app):   docker logs -f $APP_CONTAINER"
-echo "     Logs (nginx): docker logs -f $NGINX_CONTAINER"
-echo "     Status:       docker compose -f $COMPOSE_FILE ps"
-echo "     Restart:      docker compose -f $COMPOSE_FILE restart"
-echo "     Update:       git pull && bash deploy.sh"
-echo "     Stop:         docker compose -f $COMPOSE_FILE down"
+echo "     Logs:      docker logs -f $APP_CONTAINER"
+echo "     Status:    docker compose -f $COMPOSE_FILE ps"
+echo "     Restart:   docker compose -f $COMPOSE_FILE restart"
+echo "     Update:    git pull && bash deploy.sh"
+echo "     Stop:      docker compose -f $COMPOSE_FILE down"
 echo ""
 echo "  🔑 Features:"
 echo "     • Puppeteer visual analysis (Chromium in Docker)"
 echo "     • 10 AI audit skills powered by Gemini"
 echo "     • Traefik SSL via Let's Encrypt"
-echo "     • Nginx caching + security headers"
 echo "═══════════════════════════════════════════════"
