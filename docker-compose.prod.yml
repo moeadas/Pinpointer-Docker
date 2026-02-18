@@ -2,7 +2,8 @@
 # Pinpointer v6.0 — Production (Hostinger VPS)
 # Traefik -> Nginx -> Node.js App
 #
-# Domain: audit.audit.pinpoint.online
+# Domain: audit.pinpoint.online
+# VPS: 72.62.33.12 (srv1126518.hstgr.cloud)
 # Network: root_default (shared with Traefik)
 #
 # Usage: docker compose -f docker-compose.prod.yml up -d --build
@@ -19,7 +20,6 @@ services:
       - PUPPETEER_ENABLED=true
       - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
       - NODE_ENV=production
-    # No external port mapping — internal only (Nginx connects via Docker network)
     expose:
       - "3000"
     cap_add:
@@ -51,13 +51,11 @@ services:
       - pinpointer-internal
 
   # ─── Nginx Reverse Proxy ───
-  # Sits between Traefik and the Node.js app
-  # Handles: caching, security headers, gzip, static file optimization
+  # Traefik -> Nginx (this) -> Node.js app
   pinpointer-nginx:
     image: nginx:alpine
     container_name: pinpointer-nginx
     restart: unless-stopped
-    # No external port mapping — Traefik routes to this container
     expose:
       - "80"
     volumes:
@@ -72,22 +70,14 @@ services:
       retries: 3
       start_period: 10s
     # ─── Traefik Labels ───
-    # Traefik discovers this container and routes audit.audit.pinpoint.online -> here
+    # Matches your existing Traefik config from /root/docker-compose.yml
     labels:
       - "traefik.enable=true"
-      # HTTPS router
       - "traefik.http.routers.pinpointer.rule=Host(`audit.pinpoint.online`)"
-      - "traefik.http.routers.pinpointer.entrypoints=websecure"
       - "traefik.http.routers.pinpointer.tls=true"
-      - "traefik.http.routers.pinpointer.tls.certresolver=letsencrypt"
-      # Service points to Nginx port 80
+      - "traefik.http.routers.pinpointer.entrypoints=web,websecure"
+      - "traefik.http.routers.pinpointer.tls.certresolver=mytlschallenge"
       - "traefik.http.services.pinpointer.loadbalancer.server.port=80"
-      # HTTP -> HTTPS redirect
-      - "traefik.http.routers.pinpointer-http.rule=Host(`audit.pinpoint.online`)"
-      - "traefik.http.routers.pinpointer-http.entrypoints=web"
-      - "traefik.http.routers.pinpointer-http.middlewares=pinpointer-redirect"
-      - "traefik.http.middlewares.pinpointer-redirect.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.pinpointer-redirect.redirectscheme.permanent=true"
     logging:
       driver: "json-file"
       options:
@@ -95,12 +85,10 @@ services:
         max-file: "2"
     networks:
       - pinpointer-internal
-      - root_default  # Shared network with Traefik
+      - root_default
 
 networks:
-  # Internal network for app <-> nginx communication
   pinpointer-internal:
     driver: bridge
-  # External network where Traefik lives
   root_default:
     external: true
